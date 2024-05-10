@@ -3,8 +3,8 @@ package main
 import (
 	"bufio"
 	"encoding/binary"
-	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -85,7 +85,10 @@ func Encode(instruction string) uint32 {
 	if instruction == "syscall" {
 		return 12
 	}
-	inst := strings.Fields(strings.ReplaceAll(instruction, ",", ""))
+	inst, err := parse(instruction)
+	if err != nil {
+		panic(err)
+	}
 	if Instructions[inst[0]].isRtype {
 		ret = (RegNums[inst[2]] << 21) | (RegNums[inst[3]] << 16) |
 			(RegNums[inst[1]] << 11) | Instructions[inst[0]].opcode
@@ -93,7 +96,7 @@ func Encode(instruction string) uint32 {
 		var imm int32
 		i, err := strconv.Atoi(inst[3])
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 		imm = int32(i)
 		ret = (Instructions[inst[0]].opcode << 26) | (RegNums[inst[2]] << 21) |
@@ -105,13 +108,13 @@ func Encode(instruction string) uint32 {
 func Assemble(path string) {
 	file, err := os.Open(path)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	defer file.Close()
 
 	out, err := os.Create(strings.ReplaceAll(path, ".asm", ".bin"))
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	defer out.Close()
 
@@ -123,14 +126,42 @@ func Assemble(path string) {
 			binary.BigEndian.PutUint32(bs, Encode(s))
 			_, err := out.Write(bs)
 			if err != nil {
-				log.Fatal(err)
+				panic(err)
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
+}
+
+func parse(s string) ([]string, error) {
+	/* regex to match 00($t0)
+	offset, err := regexp.Compile("[0-9]+\\((.*)+\\)")
+	if err != nil {
+		panic(err)
+	}*/
+
+	edgeWs, err := regexp.Compile("(^\\s+|\\s+$)+")
+	if err != nil {
+		return nil, err
+	}
+
+	whiteSpace, err := regexp.Compile("\\s+")
+	if err != nil {
+		return nil, err
+	}
+
+	repeatComma, err := regexp.Compile(",{2,}")
+	if err != nil {
+		return nil, err
+	}
+
+	s = edgeWs.ReplaceAllString(s, "")
+	s = whiteSpace.ReplaceAllString(s, ",")
+	s = repeatComma.ReplaceAllString(s, ",")
+	return strings.Split(s, ","), nil
 }
 
 func main() {
