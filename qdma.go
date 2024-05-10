@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -80,27 +81,75 @@ var RegNums = map[string]uint32{
 	"$ra":   31,
 }
 
-func Encode(instruction string) uint32 {
-	var ret uint32 = 0
-	if instruction == "syscall" {
-		return 12
-	}
-	inst, err := parse(instruction)
+// Map for labels and their addresses
+var labels map[string]uint = make(map[string]uint)
+
+func LabelFind(path string) {
+	file, err := os.Open(path)
 	if err != nil {
 		panic(err)
 	}
-	if Instructions[inst[0]].isRtype {
-		ret = (RegNums[inst[2]] << 21) | (RegNums[inst[3]] << 16) |
-			(RegNums[inst[1]] << 11) | Instructions[inst[0]].opcode
-	} else {
-		var imm int32
-		i, err := strconv.Atoi(inst[3])
+	defer file.Close()
+
+	input := bufio.NewScanner(file)
+
+	for i := 0; input.Scan(); i += 4 {
+		if input.Text() == "" {
+			i -= 4
+			continue
+		}
+		s, err := Parse(input.Text())
 		if err != nil {
 			panic(err)
 		}
-		imm = int32(i)
-		ret = (Instructions[inst[0]].opcode << 26) | (RegNums[inst[2]] << 21) |
-			(RegNums[inst[1]] << 16) | uint32(imm)
+
+		if strings.Contains(s[0], ":") {
+			labels[strings.ReplaceAll(s[0], ":", "")] = uint(i)
+		}
+	}
+}
+
+func Encode(instruction string, pc int32) uint32 {
+	var ret uint32 = 0
+	offset := 0
+	if instruction == "syscall" {
+		return 12
+	} else if instruction == "nop" {
+		return 0
+	}
+
+	inst, err := Parse(instruction)
+	if err != nil {
+		panic(err)
+	}
+
+	_, isLabel := labels[strings.ReplaceAll(inst[0], ":", "")]
+	if isLabel {
+		offset += 1
+	}
+
+	fmt.Println(inst)
+	if Instructions[inst[0+offset]].isRtype {
+		ret = (RegNums[inst[2+offset]] << 21) | (RegNums[inst[3+offset]] <<
+			16) | (RegNums[inst[1+offset]] << 11) |
+			Instructions[inst[0+offset]].opcode
+	} else {
+		var imm int16
+		addr, isLabel := labels[inst[3+offset]]
+		if isLabel {
+			imm = int16(int32(addr) - pc - 12)
+			fmt.Println(imm, int32(addr) - pc - 12, uint32(imm) & 0x0000FFFF)
+		} else {
+			i, err := strconv.Atoi(inst[3+offset])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s\n", instruction)
+				panic(err)
+			}
+			imm = int16(i)
+		}
+		ret = (Instructions[inst[0+offset]].opcode << 26) |
+			(RegNums[inst[2+offset]] << 21) | (RegNums[inst[1+offset]] << 16) |
+			(0x0000FFFF & uint32(imm))
 	}
 	return ret
 }
@@ -119,15 +168,17 @@ func Assemble(path string) {
 	defer out.Close()
 
 	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
+	for i := 0; scanner.Scan(); i += 4 {
 		var s string = scanner.Text()
-		if s != "" {
-			bs := make([]byte, 4)
-			binary.BigEndian.PutUint32(bs, Encode(s))
-			_, err := out.Write(bs)
-			if err != nil {
-				panic(err)
-			}
+		if s == "" {
+			i -= 4
+			continue
+		}
+		bs := make([]byte, 4)
+		binary.BigEndian.PutUint32(bs, Encode(s, int32(i)))
+		_, err := out.Write(bs)
+		if err != nil {
+			panic(err)
 		}
 	}
 
@@ -136,7 +187,7 @@ func Assemble(path string) {
 	}
 }
 
-func parse(s string) ([]string, error) {
+func Parse(s string) ([]string, error) {
 	/* regex to match 00($t0)
 	offset, err := regexp.Compile("[0-9]+\\((.*)+\\)")
 	if err != nil {
@@ -166,6 +217,7 @@ func parse(s string) ([]string, error) {
 
 func main() {
 	for _, arg := range os.Args[1:] {
-		Assemble(arg)
+		LabelFind(arg) // First pass to find all labels.
+		Assemble(arg)  // Second pass to assemble the instructions.
 	}
 }
