@@ -108,15 +108,21 @@ func LabelFind(path string) {
 			continue
 		}
 
-		if strings.Contains(s[0], ":") {
+		hasLabel, err := regexp.MatchString("^.*:", s[0])
+		if err != nil {
+			panic(err)
+		}
+		if hasLabel {
 			labels[strings.ReplaceAll(s[0], ":", "")] = uint(i)
+			if len(s) == 1 {
+				i -= 4
+			}
 		}
 	}
 }
 
 func Encode(inst []string, pc int32) (uint32, error) {
 	var ret uint32 = 0
-	offset := 0
 	for _, s := range inst {
 		switch s {
 		case "syscall":
@@ -126,34 +132,29 @@ func Encode(inst []string, pc int32) (uint32, error) {
 		}
 	}
 
-	_, isLabel := labels[strings.ReplaceAll(inst[0], ":", "")]
-	if isLabel {
-		offset += 1
-	}
-
-	function := Instructions[inst[offset]]
+	function := Instructions[inst[0]]
 	if function.isRtype && function.opcode == 8 {
-		ret = (RegNums[inst[1+offset]] << 21) | function.opcode
+		ret = (RegNums[inst[1]] << 21) | function.opcode
 	} else if function.isRtype {
-		ret = (RegNums[inst[2+offset]] << 21) | (RegNums[inst[3+offset]] <<
-			16) | (RegNums[inst[1+offset]] << 11) | function.opcode
+		ret = (RegNums[inst[2]] << 21) | (RegNums[inst[3]] <<
+			16) | (RegNums[inst[1]] << 11) | function.opcode
 	} else if function.opcode == 2 || function.opcode == 3 {
-		label, _ := labels[inst[1+offset]]
+		label, _ := labels[inst[1]]
 		ret = (function.opcode << 26) | uint32(label&0x03FFFFFF)
 	} else {
 		var imm int16
-		addr, isLabel := labels[inst[3+offset]]
+		addr, isLabel := labels[inst[3]]
 		if isLabel {
 			imm = int16(int32(addr) - pc - 12)
 		} else {
-			i, err := strconv.Atoi(inst[3+offset])
+			i, err := strconv.Atoi(inst[3])
 			if err != nil {
 				return 0, err
 			}
 			imm = int16(i)
 		}
-		ret = (function.opcode << 26) | (RegNums[inst[2+offset]] << 21) |
-			(RegNums[inst[1+offset]] << 16) | (0x0000FFFF & uint32(imm))
+		ret = (function.opcode << 26) | (RegNums[inst[2]] << 21) |
+			(RegNums[inst[1]] << 16) | (0x0000FFFF & uint32(imm))
 	}
 	return ret, nil
 }
@@ -185,7 +186,12 @@ func Assemble(path string) {
 			panic(err)
 		}
 
-		if len(inst) == 1 && inst[0] == "" {
+		_, isLabel := labels[strings.ReplaceAll(inst[0], ":", "")]
+		if isLabel {
+			inst = inst[1:]
+		}
+
+		if len(inst) == 0 || (len(inst) == 1 && inst[0] == "") {
 			i -= 4
 			continue
 		}
