@@ -8,6 +8,16 @@ emulator. Currently this assembler can only handle standard instructions,
 which means no sections and no predefined data outside of an I-Type
 instruction.
 
+## TODO
+
+- ~Assemble Instructions into Binary~
+
+- ~Handle Labels and Jumps~
+
+- Encode Data Section into Binary
+
+- ~Ignore Comments~
+
 ## Instructions
 
 Here is a list of supported instructions.

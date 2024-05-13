@@ -103,24 +103,27 @@ func LabelFind(path string) {
 			panic(err)
 		}
 
+		if len(s) == 1 && s[0] == "" {
+			i -= 4
+			continue
+		}
+
 		if strings.Contains(s[0], ":") {
 			labels[strings.ReplaceAll(s[0], ":", "")] = uint(i)
 		}
 	}
 }
 
-func Encode(instruction string, pc int32) uint32 {
+func Encode(inst []string, pc int32) (uint32, error) {
 	var ret uint32 = 0
 	offset := 0
-	if instruction == "syscall" {
-		return 12
-	} else if instruction == "nop" {
-		return 0
-	}
-
-	inst, err := Parse(instruction)
-	if err != nil {
-		panic(err)
+	for _, s := range inst {
+		switch s {
+		case "syscall":
+			return 12, nil
+		case "nop":
+			return 0, nil
+		}
 	}
 
 	_, isLabel := labels[strings.ReplaceAll(inst[0], ":", "")]
@@ -128,30 +131,31 @@ func Encode(instruction string, pc int32) uint32 {
 		offset += 1
 	}
 
-	fmt.Println(inst)
-	if Instructions[inst[0+offset]].isRtype {
+	function := Instructions[inst[offset]]
+	if function.isRtype && function.opcode == 8 {
+		ret = (RegNums[inst[1+offset]] << 21) | function.opcode
+	} else if function.isRtype {
 		ret = (RegNums[inst[2+offset]] << 21) | (RegNums[inst[3+offset]] <<
-			16) | (RegNums[inst[1+offset]] << 11) |
-			Instructions[inst[0+offset]].opcode
+			16) | (RegNums[inst[1+offset]] << 11) | function.opcode
+	} else if function.opcode == 2 || function.opcode == 3 {
+		label, _ := labels[inst[1+offset]]
+		ret = (function.opcode << 26) | uint32(label&0x03FFFFFF)
 	} else {
 		var imm int16
 		addr, isLabel := labels[inst[3+offset]]
 		if isLabel {
 			imm = int16(int32(addr) - pc - 12)
-			fmt.Println(imm, int32(addr) - pc - 12, uint32(imm) & 0x0000FFFF)
 		} else {
 			i, err := strconv.Atoi(inst[3+offset])
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s\n", instruction)
-				panic(err)
+				return 0, err
 			}
 			imm = int16(i)
 		}
-		ret = (Instructions[inst[0+offset]].opcode << 26) |
-			(RegNums[inst[2+offset]] << 21) | (RegNums[inst[1+offset]] << 16) |
-			(0x0000FFFF & uint32(imm))
+		ret = (function.opcode << 26) | (RegNums[inst[2+offset]] << 21) |
+			(RegNums[inst[1+offset]] << 16) | (0x0000FFFF & uint32(imm))
 	}
-	return ret
+	return ret, nil
 }
 
 func Assemble(path string) {
@@ -168,15 +172,31 @@ func Assemble(path string) {
 	defer out.Close()
 
 	scanner := bufio.NewScanner(file)
+	bs := make([]byte, 4)
 	for i := 0; scanner.Scan(); i += 4 {
 		var s string = scanner.Text()
 		if s == "" {
 			i -= 4
 			continue
 		}
-		bs := make([]byte, 4)
-		binary.BigEndian.PutUint32(bs, Encode(s, int32(i)))
-		_, err := out.Write(bs)
+
+		inst, err := Parse(s)
+		if err != nil {
+			panic(err)
+		}
+
+		if len(inst) == 1 && inst[0] == "" {
+			i -= 4
+			continue
+		}
+
+		bytes, err := Encode(inst, int32(i))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "while encoding %s: %v", s, err)
+			panic(err)
+		}
+		binary.BigEndian.PutUint32(bs, bytes)
+		_, err = out.Write(bs)
 		if err != nil {
 			panic(err)
 		}
@@ -194,6 +214,11 @@ func Parse(s string) ([]string, error) {
 		panic(err)
 	}*/
 
+	comments, err := regexp.Compile("#.*")
+	if err != nil {
+		panic(err)
+	}
+
 	edgeWs, err := regexp.Compile("(^\\s+|\\s+$)+")
 	if err != nil {
 		return nil, err
@@ -209,6 +234,7 @@ func Parse(s string) ([]string, error) {
 		return nil, err
 	}
 
+	s = comments.ReplaceAllString(s, "")
 	s = edgeWs.ReplaceAllString(s, "")
 	s = whiteSpace.ReplaceAllString(s, ",")
 	s = repeatComma.ReplaceAllString(s, ",")

@@ -1,15 +1,17 @@
-addi $t0, $zero, 10
-addi $t1, $zero, 12
+# This is a test program to test the capabilities of the assembler
+
+addi $t0, $zero, 10		# load 10 into $t0
+addi $t1, $zero, 12		# load 12 into $t1
 add $t2, $t1, $t0
-beq $zero, $zero, PrintInt
+jal PrintInt
 nop
-caller: beq $zero, $zero, Exit
+j Exit # Exit the program
 nop
 
 PrintInt: add $a0, $t2, $zero
 addi $v0, $zero, 1
 syscall
-beq $zero, $zero, caller
+jr $ra
 nop
 
 Exit: addi $v0, $zero, 10
