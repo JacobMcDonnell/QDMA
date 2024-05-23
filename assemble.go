@@ -106,7 +106,8 @@ func Encode(inst []string, pc int32) ([]byte, error) {
 			16) | (RegNums[inst[1]] << 11) | function.opcode
 	} else if function.opcode == 2 || function.opcode == 3 {
 		label, _ := labels[inst[1]]
-		ret = (function.opcode << 26) | uint32(label&0x03FFFFFF)
+		addr := label.pos + SectionPos[label.section]
+		ret = (function.opcode << 26) | uint32(addr&0x03FFFFFF)
 	} else if function.opcode == 35 || function.opcode == 43 {
 		immReg, err := regexp.Compile("^[0-9]+")
 		if err != nil {
@@ -125,9 +126,10 @@ func Encode(inst []string, pc int32) ([]byte, error) {
 		ret = (function.opcode << 26) | (RegNums[reg] << 21) |
 			(RegNums[inst[1]] << 16) | (0xFFFF & uint32(imm))
 	} else {
-		addr, isLabel := labels[inst[3]]
+		label, isLabel := labels[inst[3]]
+		addr := int32(label.pos + SectionPos[label.section])
 		if isLabel {
-			imm = int16(int32(addr) - pc - 12)
+			imm = int16(addr - pc - 12)
 		} else {
 			i, err := strconv.Atoi(inst[3])
 			if err != nil {
@@ -142,87 +144,12 @@ func Encode(inst []string, pc int32) ([]byte, error) {
 	return bytes, nil
 }
 
-func EncodeData(line []string) ([]byte, error) {
-	var size int
-	var err error = nil
-	var data int64
-	isString := false
-	isData := false
-	nullTerm := false
-
-	line[1] = strings.ReplaceAll(line[1], "\"", "")
-
-	switch line[0] {
-	case ".space":
-		size, err = strconv.Atoi(line[1])
-	case ".word":
-		size = 4
-		isData = true
-	case ".byte":
-		size = 1
-		isData = true
-	case ".half":
-		size = 2
-		isData = true
-	case ".asciiz":
-		size = len(line[1]) + 1
-		isString = true
-		nullTerm = true
-	case ".ascii":
-		size = len(line[1])
-		isString = true
-	}
-	if err != nil {
-		return nil, err
-	}
-	bytes := make([]byte, size)
-
-	if isData {
-		if strings.Contains(line[1], "0x") {
-			line[1] = strings.ReplaceAll(line[1], "0x", "")
-			var t uint64
-			t, err = strconv.ParseUint(line[1], 16, size*8)
-			data = int64(t)
-		} else {
-			data, err = strconv.ParseInt(line[1], 10, size*8)
-		}
-		if err != nil {
-			return nil, err
-		}
-		switch size {
-		case 1:
-			bytes[0] = uint8(data)
-		case 2:
-			binary.NativeEndian.PutUint16(bytes, uint16(data))
-		case 4:
-			binary.NativeEndian.PutUint32(bytes, uint32(data))
-		}
-	} else if isString {
-		if nullTerm {
-			for i, b := range []byte(line[1]) {
-				bytes[i] = b
-			}
-			bytes[size-1] = 0
-		} else {
-			bytes = []byte(line[1])
-		}
-	}
-
-	return bytes, nil
-}
-
-func Assemble(path string) {
+func Assemble(path string, out *os.File) {
 	file, err := os.Open(path)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
-
-	out, err := os.Create(strings.ReplaceAll(path, ".asm", ".bin"))
-	if err != nil {
-		panic(err)
-	}
-	defer out.Close()
 
 	scanner := bufio.NewScanner(file)
 	for i := 0; scanner.Scan(); i += 4 {
@@ -230,11 +157,15 @@ func Assemble(path string) {
 		if s == "" {
 			i -= 4
 			continue
-		} else if s == ".data" {
+		} else if s == ".data" || s == ".rodata" || s == ".bss" {
 			isText = false
 			continue
 		} else if s == ".text" {
 			isText = true
+			continue
+		}
+
+		if !isText {
 			continue
 		}
 
@@ -253,12 +184,7 @@ func Assemble(path string) {
 			continue
 		}
 
-		var bytes []byte
-		if isText {
-			bytes, err = Encode(inst, int32(i))
-		} else {
-			bytes, err = EncodeData(inst)
-		}
+		bytes, err := Encode(inst, int32(i))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "while encoding %s: %v", s, err)
 			panic(err)
@@ -267,13 +193,6 @@ func Assemble(path string) {
 			panic(err)
 		}
 	}
-
-	/*
-		// Write the new starting PC into the header
-		if _, err := out.Seek(0, io.SeekStart); err != nil {
-			panic(err)
-		}
-	*/
 
 	if err := scanner.Err(); err != nil {
 		panic(err)

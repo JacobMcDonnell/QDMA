@@ -10,9 +10,15 @@ syscall
 .data
 
 x: .word 0xFFFFFFFF
-#fib: .space 40
-#h: .half 255
-#c: .byte 0
-#dogs: .ascii "Dogs are cool\n"
-#cats: .asciiz "cats are cool\n"
+cats: .asciiz "cats are cool\n"
+c: .byte 0
+
+.rodata
+
+g: .word 50
+dogs: .ascii "Dogs are cool\n"
+h: .half 255
+
+.bss
+fib: .space 40
 

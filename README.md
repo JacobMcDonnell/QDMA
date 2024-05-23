@@ -4,9 +4,8 @@
 
 QDMA is a simple MIPS assembler written in Go for
 [QDME](https://github.com/JacobMcDonnell/QDME), which is my simple MIPS
-emulator. Currently this assembler can only handle standard instructions,
-which means no sections and no predefined data outside of an I-Type
-instruction.
+emulator. QDMA implements a partial version of the Executable and Linkable
+Format (ELF), [See Partial ELF for more information](#Partial-ELF).
 
 ## TODO
 
@@ -14,7 +13,7 @@ instruction.
 
 - ~Handle Labels and Jumps~
 
-- Encode Data Section into Binary
+- ~Encode Data Section into Binary~
 
 - ~Ignore Comments~
 
@@ -62,3 +61,14 @@ Here is a list of supported instructions.
 |lw         |I   |rs = imm(rt)|
 |sw         |I   |imm(rt) = rs|
 
+## Partial ELF
+
+QDMA is partiallialy complient with ELF, meaning that it supports segments but
+not sections. The supported segments are `.text`, `.data`, `.rodata`, and
+`.bss`. `.text` is for the instructions. `.data` and `.rodata` are for defined
+data types with initial values, `.rodata` being read only. Supported data types
+are `.word` for a 4 byte value, `.half` for a 2 byte value, `.byte` for a byte,
+`.asciiz` for a null terminated string, and `.ascii` for a non null terminated
+string. `.bss` is for variables where there is no initial value. In this
+section you define the space that a variable will take up in bytes using
+`.space`.
