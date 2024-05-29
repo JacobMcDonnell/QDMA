@@ -18,6 +18,7 @@ type PosPair struct {
 var labels map[string]PosPair = make(map[string]PosPair)
 
 var SectionPos [4]uint
+var SectionStart [4]uint
 
 const (
 	TEXT   = 0
@@ -82,8 +83,15 @@ func LabelFind(path string, dTemp, rTemp *os.File) {
 		if err != nil {
 			panic(err)
 		}
+		if Section == TEXT && s[0] == "la" {
+			offset += 4
+		}
 		*i += offset
 	}
+	SectionStart[0] = 0
+	SectionStart[1] = SectionPos[0]
+	SectionStart[2] = SectionPos[1] + SectionPos[1]
+	SectionStart[3] = SectionPos[2] + SectionPos[2]
 }
 
 func CalcOffset(s []string, Section uint8, dTemp, rTemp *os.File) (uint, error) {

@@ -66,7 +66,7 @@ func main() {
 
 		var fOffset, mOffset uint32 = 0, 0
 		for j, p := range PHeaders[:i] {
-			PHeaders[j].offset = uint32(i*PHENSIZE) + fOffset
+			PHeaders[j].offset = uint32(i*PHENSIZE) + fOffset + EHSIZE
 			fOffset += p.filesz
 			PHeaders[j].vaddr = mOffset
 			mOffset += p.memsz
