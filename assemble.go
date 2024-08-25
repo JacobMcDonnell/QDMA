@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"regexp"
@@ -91,10 +90,10 @@ func Encode(inst []string, pc int32) ([]byte, error) {
 	for _, s := range inst {
 		switch s {
 		case "syscall":
-			binary.NativeEndian.PutUint32(bytes, 12)
+			byteOrder.PutUint32(bytes, 12)
 			return bytes, nil
 		case "nop":
-			binary.NativeEndian.PutUint32(bytes, 0)
+			byteOrder.PutUint32(bytes, 0)
 			return bytes, nil
 		}
 	}
@@ -177,7 +176,7 @@ func Encode(inst []string, pc int32) ([]byte, error) {
 			(RegNums[inst[1]] << 16) | (0xFFFF & uint32(imm))
 	}
 	fmt.Println(inst)
-	binary.NativeEndian.PutUint32(bytes, ret)
+	byteOrder.PutUint32(bytes, ret)
 	return bytes, nil
 }
 

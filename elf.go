@@ -60,11 +60,18 @@ func EHInit(e_entry uint32, e_phnum uint16) ElfHeader {
 	var e ElfHeader
 	e.e_ident = [EI_NIDENT]byte{0x7f, 0x45, 0x4c, 0x46, // ELF magic number
 		0x01,                                     // 32-bit format
-		0x01,                                     // Little Endian
+		0x00,                                     // Endian
 		0x01,                                     // ELF Version
 		0x00,                                     // Target OS
 		0x00,                                     // Target ABI
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} // Padding
+
+	if byteOrder == binary.BigEndian {
+		e.e_ident[5] = 0x02
+	} else {
+		e.e_ident[5] = 0x01
+	}
+
 	e.e_type = ET_EXEC
 	e.e_machine = MIPS
 	e.e_version = 0x01
@@ -95,31 +102,31 @@ func (e *ElfHeader) ToBytes() []byte {
 		bytes[i] = b
 		i++
 	}
-	binary.NativeEndian.PutUint16(bytes[EI_NIDENT:], e.e_type)
-	binary.NativeEndian.PutUint16(bytes[18:], e.e_machine)
-	binary.NativeEndian.PutUint32(bytes[20:], e.e_version)
-	binary.NativeEndian.PutUint32(bytes[24:], e.e_entry)
-	binary.NativeEndian.PutUint32(bytes[28:], e.e_phoff)
-	binary.NativeEndian.PutUint32(bytes[32:], e.e_shoff)
-	binary.NativeEndian.PutUint32(bytes[36:], e.e_flags)
-	binary.NativeEndian.PutUint16(bytes[40:], e.e_ehsize)
-	binary.NativeEndian.PutUint16(bytes[42:], e.e_phentsize)
-	binary.NativeEndian.PutUint16(bytes[44:], e.e_phnum)
-	binary.NativeEndian.PutUint16(bytes[46:], e.e_shentsize)
-	binary.NativeEndian.PutUint16(bytes[48:], e.e_shnum)
-	binary.NativeEndian.PutUint16(bytes[50:], e.e_shstrndx)
+	byteOrder.PutUint16(bytes[EI_NIDENT:], e.e_type)
+	byteOrder.PutUint16(bytes[18:], e.e_machine)
+	byteOrder.PutUint32(bytes[20:], e.e_version)
+	byteOrder.PutUint32(bytes[24:], e.e_entry)
+	byteOrder.PutUint32(bytes[28:], e.e_phoff)
+	byteOrder.PutUint32(bytes[32:], e.e_shoff)
+	byteOrder.PutUint32(bytes[36:], e.e_flags)
+	byteOrder.PutUint16(bytes[40:], e.e_ehsize)
+	byteOrder.PutUint16(bytes[42:], e.e_phentsize)
+	byteOrder.PutUint16(bytes[44:], e.e_phnum)
+	byteOrder.PutUint16(bytes[46:], e.e_shentsize)
+	byteOrder.PutUint16(bytes[48:], e.e_shnum)
+	byteOrder.PutUint16(bytes[50:], e.e_shstrndx)
 	return bytes
 }
 
 func (p *ProgramHeader) ToBytes() []byte {
 	bytes := make([]byte, PHENSIZE)
-	binary.NativeEndian.PutUint32(bytes[0:], p.ptype)
-	binary.NativeEndian.PutUint32(bytes[4:], p.offset)
-	binary.NativeEndian.PutUint32(bytes[8:], p.vaddr)
-	binary.NativeEndian.PutUint32(bytes[12:], p.paddr)
-	binary.NativeEndian.PutUint32(bytes[16:], p.filesz)
-	binary.NativeEndian.PutUint32(bytes[20:], p.memsz)
-	binary.NativeEndian.PutUint32(bytes[24:], p.flags)
-	binary.NativeEndian.PutUint32(bytes[28:], p.align)
+	byteOrder.PutUint32(bytes[0:], p.ptype)
+	byteOrder.PutUint32(bytes[4:], p.offset)
+	byteOrder.PutUint32(bytes[8:], p.vaddr)
+	byteOrder.PutUint32(bytes[12:], p.paddr)
+	byteOrder.PutUint32(bytes[16:], p.filesz)
+	byteOrder.PutUint32(bytes[20:], p.memsz)
+	byteOrder.PutUint32(bytes[24:], p.flags)
+	byteOrder.PutUint32(bytes[28:], p.align)
 	return bytes
 }

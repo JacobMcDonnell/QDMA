@@ -1,84 +1,108 @@
 package main
 
 import (
+	"encoding/binary"
 	"os"
-	"strings"
 )
 
+type PathPair struct {
+	input  string
+	output string
+}
+
+var byteOrder binary.ByteOrder = binary.NativeEndian
+
 func main() {
-	for _, arg := range os.Args[1:] {
-		tempData, err := os.CreateTemp("", "data*")
-		Check(err)
-		dName := tempData.Name()
-		defer os.Remove(dName)
-
-		tempRoData, err := os.CreateTemp("", "rodata*")
-		Check(err)
-		rName := tempRoData.Name()
-		defer os.Remove(rName)
-
-		tempText, err := os.CreateTemp("", "text*")
-		Check(err)
-		tName := tempText.Name()
-		defer os.Remove(tName)
-
-		// First pass to find the address of all labels and encode the data
-		LabelFind(arg, tempData, tempRoData)
-
-		var names [3]string
-		var PHeaders [4]ProgramHeader
-		i := 0
-		n := 0
-
-		if SectionPos[TEXT] > 0 {
-			PHeaders[i] = ProgramHeader{PT_LOAD, 0, 0, 0,
-				uint32(SectionPos[TEXT]), uint32(SectionPos[TEXT]), PF_READ +
-					PF_EXEC, 0}
-			names[i] = tName
-			i++
-			n++
-			// Second pass to assemble the instructions.
-			Assemble(arg, tempText)
+	var inputFiles []PathPair
+	for i, arg := range os.Args[1:] {
+		switch arg {
+		case "-b":
+			byteOrder = binary.BigEndian
+		case "-l":
+			byteOrder = binary.LittleEndian
+		case "-o":
+			inputFiles = append(inputFiles, PathPair{os.Args[i+3], os.Args[i+2]})
 		}
+	}
 
-		if SectionPos[DATA] > 0 {
-			PHeaders[i] = ProgramHeader{PT_LOAD, 0, 0, 0,
-				uint32(SectionPos[DATA]), uint32(SectionPos[DATA]), PF_READ +
-					PF_WRITE, 0}
-			names[i] = dName
-			i++
-			n++
-		}
-
-		if SectionPos[RODATA] > 0 {
-			PHeaders[i] = ProgramHeader{PT_LOAD, 0, 0, 0,
-				uint32(SectionPos[RODATA]), uint32(SectionPos[RODATA]), PF_READ, 0}
-			names[i] = rName
-			i++
-			n++
-		}
-
-		if SectionPos[BSS] > 0 {
-			PHeaders[i] = ProgramHeader{PT_LOAD, 0, 0, 0, 0,
-				uint32(SectionPos[BSS]), PF_READ + PF_WRITE, 0}
-			i++
-		}
-
-		var fOffset, mOffset uint32 = 0, 0
-		for j, p := range PHeaders[:i] {
-			PHeaders[j].offset = uint32(i*PHENSIZE) + fOffset + EHSIZE
-			fOffset += p.filesz
-			PHeaders[j].vaddr = mOffset
-			mOffset += p.memsz
-		}
-
-		EHeader := EHInit(0, uint16(i))
-		WriteBinary(arg, EHeader, PHeaders[:i], names[:n])
+	for _, p := range inputFiles {
+		AssembleFile(p)
 	}
 }
 
-func WriteBinary(path string, e ElfHeader, ps []ProgramHeader, ns []string) {
-	out, err := os.Create(strings.ReplaceAll(path, ".asm", ".bin"))
+func AssembleFile(path PathPair) {
+	tempData, err := os.CreateTemp("", "data*")
+	Check(err)
+	dName := tempData.Name()
+	defer os.Remove(dName)
+
+	tempRoData, err := os.CreateTemp("", "rodata*")
+	Check(err)
+	rName := tempRoData.Name()
+	defer os.Remove(rName)
+
+	tempText, err := os.CreateTemp("", "text*")
+	Check(err)
+	tName := tempText.Name()
+	defer os.Remove(tName)
+
+	// First pass to find the address of all labels and encode the data
+	LabelFind(path.input, tempData, tempRoData)
+
+	var names [3]string
+	var PHeaders [4]ProgramHeader
+	i := 0
+	n := 0
+
+	if SectionPos[TEXT] > 0 {
+		PHeaders[i] = ProgramHeader{PT_LOAD, 0, 0, 0,
+			uint32(SectionPos[TEXT]), uint32(SectionPos[TEXT]), PF_READ +
+				PF_EXEC, 0}
+		names[i] = tName
+		i++
+		n++
+		// Second pass to assemble the instructions.
+		Assemble(path.input, tempText)
+	}
+
+	if SectionPos[DATA] > 0 {
+		PHeaders[i] = ProgramHeader{PT_LOAD, 0, 0, 0,
+			uint32(SectionPos[DATA]), uint32(SectionPos[DATA]), PF_READ +
+				PF_WRITE, 0}
+		names[i] = dName
+		i++
+		n++
+	}
+
+	if SectionPos[RODATA] > 0 {
+		PHeaders[i] = ProgramHeader{PT_LOAD, 0, 0, 0,
+			uint32(SectionPos[RODATA]), uint32(SectionPos[RODATA]), PF_READ, 0}
+		names[i] = rName
+		i++
+		n++
+	}
+
+	if SectionPos[BSS] > 0 {
+		PHeaders[i] = ProgramHeader{PT_LOAD, 0, 0, 0, 0,
+			uint32(SectionPos[BSS]), PF_READ + PF_WRITE, 0}
+		i++
+	}
+
+	var fOffset, mOffset uint32 = 0, 0
+	for j, p := range PHeaders[:i] {
+		PHeaders[j].offset = uint32(i*PHENSIZE) + fOffset + EHSIZE
+		fOffset += p.filesz
+		PHeaders[j].vaddr = mOffset
+		mOffset += p.memsz
+	}
+
+	EHeader := EHInit(0, uint16(i))
+	WriteBinary(path, EHeader, PHeaders[:i], names[:n])
+
+}
+
+func WriteBinary(path PathPair, e ElfHeader, ps []ProgramHeader, ns []string) {
+	out, err := os.Create(path.output)
 	Check(err)
 	defer out.Close()
 	_, err = out.Write(e.ToBytes())

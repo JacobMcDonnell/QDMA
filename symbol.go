@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/binary"
 	"os"
 	"regexp"
 	"strconv"
@@ -170,9 +169,9 @@ func EncodeData(line []string) ([]byte, error) {
 		case 1:
 			bytes[0] = uint8(data)
 		case 2:
-			binary.NativeEndian.PutUint16(bytes, uint16(data))
+			byteOrder.PutUint16(bytes, uint16(data))
 		case 4:
-			binary.NativeEndian.PutUint32(bytes, uint32(data))
+			byteOrder.PutUint32(bytes, uint32(data))
 		}
 	} else if isString {
 		if nullTerm {

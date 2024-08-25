@@ -7,6 +7,14 @@ QDMA is a simple MIPS assembler written in Go for
 emulator. QDMA implements a partial version of the Executable and Linkable
 Format (ELF), [See Partial ELF for more information](#Partial-ELF).
 
+## Options
+
+- `-o output` set an output file name
+
+- `-b` Set byte order to big endian (default is native)
+
+- `-l` Set byte order to little endian (default is native)
+
 ## TODO
 
 - ~Assemble Instructions into Binary~
